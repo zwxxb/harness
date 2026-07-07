@@ -24,6 +24,12 @@ Superpowers
 GitNexus
   code graph for architecture, semantic search, execution flows, symbols,
   callers, callees, and impact navigation
+
+deslop
+  post-implementation cleanup skill; strips AI slop from the branch diff
+
+quality-review
+  strict maintainability review; the standard completion gate
 ```
 
 ## Why Fable Advisor With Fable Main
@@ -57,11 +63,17 @@ execution processes, symbol context, callers, and callees. That makes it the
 right first stop for unfamiliar code, flow tracing, architecture, refactoring,
 and impact analysis.
 
-Expected search order:
+The concrete search order and resource URIs live in the lead-orchestrator
+skill, which is installed into every target repo.
 
-1. Check graph status with `./scripts/gitnexus-graph.sh status`.
-2. Build or refresh with `./scripts/gitnexus-graph.sh analyze` when missing or stale.
-3. Read `gitnexus://repo/{name}/context`.
-4. Use `understand/components`, `understand/layers`, and `understand/tour` for architecture.
-5. Use GitNexus query/context tools for concepts, flows, symbols, callers, and callees.
-6. Use `rg` for literal checks and exact file/string follow-up.
+## Why Deslop And Quality-Review Are Separate Gates
+
+`deslop` (ported from Cursor's team kit) is a mechanical pass: strip
+AI-generated slop from the branch diff without changing behavior. It runs
+after focused verification so cleanup cannot mask a regression.
+
+`quality-review` (ported from Cursor's thermo-nuclear-code-quality-review) is
+a structural gate: abstraction quality, file-size growth, spaghetti
+conditionals, boundary hygiene. It runs last because it judges the final shape
+of the change. Keeping the two separate keeps deslop cheap enough to run
+always and the review strict enough to block.

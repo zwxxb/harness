@@ -52,20 +52,8 @@ Before broad code exploration, build or refresh the GitNexus graph:
 ./scripts/gitnexus-graph.sh analyze
 ```
 
-Once indexed, use GitNexus resources/tools to navigate:
-
-```text
-gitnexus://repos
-gitnexus://repo/{name}/context
-gitnexus://repo/{name}/understand/components
-gitnexus://repo/{name}/understand/layers
-gitnexus://repo/{name}/understand/tour
-gitnexus://repo/{name}/process/{name}
-```
-
-Use GitNexus query/context tools for concepts, execution flows, symbols,
-callers, and callees. Use `rg` only for literal follow-up checks or when
-GitNexus is unavailable.
+The SessionStart hook reports graph status automatically. Resource URIs and
+navigation detail live in `.claude/skills/lead-orchestrator/SKILL.md`.
 
 ## First Prompt
 

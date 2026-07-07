@@ -47,27 +47,14 @@ Use the cheaper Sonnet executor + Opus advisor mode:
 ./scripts/claude-sonnet-opus.sh
 ```
 
-## Expected Planning Flow
+## Expected Workflow
 
-For substantial work, Claude should follow this sequence:
-
-1. Use `superpowers:brainstorming`.
-2. Explore repo context.
-3. Ask clarifying questions one at a time.
-4. Compare 2-3 approaches and recommend one.
-5. Save the approved design/spec under `docs/superpowers/specs/`.
-6. Use `superpowers:writing-plans`.
-7. Save the implementation plan under `docs/superpowers/plans/`.
-8. Execute only after the plan is approved.
-
-## Expected Execution Flow
-
-After the plan is approved:
-
-- Use `deep-reasoner` for hard architecture, debugging, security, and invariant decisions.
-- Use `fast-worker` for scoped mechanical edits and verification.
-- Use Codex for independent rescue, fresh diagnosis, or adversarial review.
-- Use advisor, Codex review, or `code-review-specialist` before finalizing substantial work.
+The full workflow lives in `template/.claude/skills/lead-orchestrator/SKILL.md`
+(installed as `.claude/skills/lead-orchestrator/SKILL.md`). In short: Superpowers
+brainstorming -> approved spec -> Superpowers plan -> delegated execution
+(`deep-reasoner` for hard reasoning, `fast-worker` for mechanical work, Codex
+as an independent peer) -> `deslop` cleanup -> `quality-review` completion
+gate. Rationale for each piece is in `docs/ARCHITECTURE.md`.
 
 ## Files
 
@@ -79,23 +66,15 @@ After the plan is approved:
 
 ## Code Search
 
-For broad code search in an installed repo:
+GitNexus is the primary code-search layer for installed repos. Build or check
+the graph:
 
 ```bash
 ./scripts/gitnexus-graph.sh status
 ./scripts/gitnexus-graph.sh analyze
 ```
 
-Then use GitNexus resources/tools from Claude Code:
-
-- `gitnexus://repo/{name}/context`
-- `gitnexus://repo/{name}/understand/components`
-- `gitnexus://repo/{name}/understand/layers`
-- `gitnexus://repo/{name}/understand/tour`
-- GitNexus query/context tools for execution flows and symbols
-
-Use `rg` for literal follow-up checks, not as the primary architecture search
-tool.
+Resource URIs and query-tool usage live in the lead-orchestrator skill.
 
 ## One-Time Plugin Setup
 
