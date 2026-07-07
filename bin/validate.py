@@ -22,6 +22,7 @@ REQUIRED_TEMPLATE_FILES = [
     "template/.claude/agents/fast-worker.md",
     "template/.claude/skills/lead-orchestrator/SKILL.md",
     "template/.claude/skills/deslop/SKILL.md",
+    "template/.claude/skills/quality-review/SKILL.md",
     "template/.claude/statusline.py",
     "template/scripts/claude-lead.sh",
     "template/scripts/claude-plan.sh",
@@ -39,6 +40,7 @@ REQUIRED_TARGET_FILES = [
     ".claude/agents/fast-worker.md",
     ".claude/skills/lead-orchestrator/SKILL.md",
     ".claude/skills/deslop/SKILL.md",
+    ".claude/skills/quality-review/SKILL.md",
     ".claude/statusline.py",
     "scripts/claude-lead.sh",
     "scripts/claude-plan.sh",
@@ -120,6 +122,7 @@ def validate_package(check: Check) -> None:
     frontmatter(TEMPLATE / ".claude/agents/fast-worker.md", ["name", "description", "model"], check)
     frontmatter(TEMPLATE / ".claude/skills/lead-orchestrator/SKILL.md", ["name", "description"], check)
     frontmatter(TEMPLATE / ".claude/skills/deslop/SKILL.md", ["name", "description"], check)
+    frontmatter(TEMPLATE / ".claude/skills/quality-review/SKILL.md", ["name", "description"], check)
 
     plan_text = (TEMPLATE / "scripts/claude-plan.sh").read_text(encoding="utf-8")
     check.require("superpowers:brainstorming" in plan_text, "planning launcher mentions superpowers:brainstorming")
