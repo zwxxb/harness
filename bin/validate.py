@@ -118,6 +118,22 @@ def validate_package(check: Check) -> None:
     check.require(settings.get("model") == "fable", "template main model is fable")
     check.require(settings.get("advisorModel") == "fable", "template advisor model is fable")
 
+    allow = settings.get("permissions", {}).get("allow")
+    check.require(
+        isinstance(allow, list) and bool(allow) and all(isinstance(item, str) for item in allow),
+        "template settings has non-empty permissions.allow string list",
+    )
+    session_start = settings.get("hooks", {}).get("SessionStart", [])
+    hook_commands = [
+        hook.get("command", "")
+        for entry in session_start
+        for hook in entry.get("hooks", [])
+    ]
+    check.require(
+        any("gitnexus-graph.sh" in command for command in hook_commands),
+        "template settings has GitNexus SessionStart hook",
+    )
+
     frontmatter(TEMPLATE / ".claude/agents/deep-reasoner.md", ["name", "description", "model"], check)
     frontmatter(TEMPLATE / ".claude/agents/fast-worker.md", ["name", "description", "model"], check)
     frontmatter(TEMPLATE / ".claude/skills/lead-orchestrator/SKILL.md", ["name", "description"], check)
