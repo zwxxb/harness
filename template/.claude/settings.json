@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "fable",
+  "advisorModel": "fable",
+  "effortLevel": "high",
+  "autoCompactEnabled": true,
+  "awaySummaryEnabled": true,
+  "cleanupPeriodDays": 45,
+  "statusLine": {
+    "type": "command",
+    "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/statusline.py",
+    "padding": 1,
+    "refreshInterval": 10
+  },
+  "enabledPlugins": {
+    "codex@openai-codex": true,
+    "superpowers@superpowers-dev": true
+  }
+}
+
