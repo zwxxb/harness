@@ -3,7 +3,7 @@ name: deep-reasoner
 description: Use for reasoning-heavy phases, architecture, debugging complex issues, algorithm design, security-sensitive decisions, invariant analysis, and high-stakes tradeoffs. Return a concise conclusion the orchestrator can act on.
 model: opus
 effort: max
-tools: Read, Glob, Grep, Bash
+tools: Read, Glob, Grep, Bash, mcp__gitnexus__query, mcp__gitnexus__context, mcp__gitnexus__trace, mcp__gitnexus__impact, mcp__gitnexus__explain, mcp__gitnexus__list_repos
 memory: project
 color: purple
 ---
