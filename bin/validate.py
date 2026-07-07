@@ -146,8 +146,11 @@ def validate_package(check: Check) -> None:
 
     claude_md = (TEMPLATE / ".claude/CLAUDE.md").read_text(encoding="utf-8")
     orchestrator = (TEMPLATE / ".claude/skills/lead-orchestrator/SKILL.md").read_text(encoding="utf-8")
-    check.require("GitNexus" in claude_md and "gitnexus://repo" in claude_md, "CLAUDE.md makes GitNexus primary for code search")
+    check.require("GitNexus" in claude_md, "CLAUDE.md makes GitNexus primary for code search")
+    check.require("gitnexus://repo" in orchestrator, "lead-orchestrator owns GitNexus resource URIs")
     check.require("gitnexus-graph.sh analyze" in orchestrator, "lead-orchestrator checks/builds GitNexus graph")
+    check.require("deslop" in claude_md and "quality-review" in claude_md, "CLAUDE.md wires deslop and quality-review")
+    check.require("deslop" in orchestrator and "quality-review" in orchestrator, "lead-orchestrator wires deslop and quality-review")
 
     probe = {
         "workspace": {"current_dir": str(ROOT)},

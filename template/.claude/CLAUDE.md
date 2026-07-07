@@ -1,67 +1,49 @@
 # Claude Coding Harness
 
 Default posture: the main Claude thread is the Fable lead. Plan, decompose,
-synthesize, and keep the main context lean.
+synthesize, and keep the main context lean. For non-trivial work, run the
+`lead-orchestrator` skill — it owns the detailed workflow.
 
 ## Planning
 
-Use Superpowers as the primary planning workflow:
+For broad features, behavior changes, architecture, or complex debugging:
+`superpowers:brainstorming` first (approved design spec in
+`docs/superpowers/specs/`), then `superpowers:writing-plans` (implementation
+plan in `docs/superpowers/plans/`). Execute only after the plan is approved.
+Native `/plan` is not the primary planning workflow.
 
-1. Invoke `superpowers:brainstorming` before native `/plan` or implementation
-   for broad features, behavior changes, architecture, and complex debugging.
-2. Use it to explore context, ask clarifying questions, compare approaches, and
-   write an approved design spec in `docs/superpowers/specs/`.
-3. After the spec is approved, invoke `superpowers:writing-plans` to write the
-   implementation plan in `docs/superpowers/plans/`.
-4. Only execute after the Superpowers plan is saved and the user chooses the
-   execution path.
+## Code Search
 
-## Code Search And Navigation
-
-Use GitNexus as the primary code-search and navigation layer for broad or
-semantic exploration.
-
-Before broad code exploration:
-
-1. Check whether the repo has a GitNexus graph:
-   `./scripts/gitnexus-graph.sh status`
-2. If missing or stale, start `./scripts/gitnexus-graph.sh analyze` in the
-   background and continue with `rg`/Read for the first exploration pass.
-   Switch to GitNexus queries once the graph is ready.
-3. Use GitNexus resources and tools to navigate:
-   - `gitnexus://repos`
-   - `gitnexus://repo/{name}/context`
-   - `gitnexus://repo/{name}/understand/components`
-   - `gitnexus://repo/{name}/understand/layers`
-   - `gitnexus://repo/{name}/understand/tour`
-   - `gitnexus://repo/{name}/process/{name}`
-   - GitNexus query/context tools for concepts, flows, callers, callees, and symbols.
-
-Use `rg` after GitNexus for literal string checks, exact filenames, or when
-GitNexus is unavailable. Do not rely on ad hoc grep-only exploration for
-architecture, flow tracing, impact analysis, or unfamiliar code paths.
+GitNexus is the primary layer for broad or semantic exploration —
+architecture, flow tracing, impact analysis, unfamiliar code. The SessionStart
+hook reports graph status; build or refresh with
+`./scripts/gitnexus-graph.sh analyze` (in the background) when missing or
+stale. Use `rg` for literal strings and exact filenames, or while the graph is
+building — not as the primary architecture search tool.
 
 ## Delegation
 
-- Reasoning-heavy phases -> `deep-reasoner` (Opus). Use for architecture,
-  complex debugging, algorithm design, security-sensitive decisions, invariant
-  analysis, and high-stakes tradeoffs.
-- Mechanical work -> `fast-worker` (Sonnet). Use for straightforward edits,
-  boilerplate, test scaffolding, formatting, and simple refactors after the
-  plan is clear.
-- Fresh perspective -> `codex:rescue --background` or related Codex commands.
-  Treat Codex as a peer engineer from a different model family, not as a
-  passive reviewer.
-- Completion checks -> native advisor, `deep-reasoner`, Codex review, or
-  `code-review-specialist` depending on task risk.
+- Hard reasoning (architecture, complex debugging, algorithms,
+  security-sensitive decisions, invariants, high-stakes tradeoffs) ->
+  `deep-reasoner` (Opus).
+- Mechanical work (scoped edits, boilerplate, test scaffolding, formatting,
+  simple refactors) -> `fast-worker` (Sonnet), only after the approach is
+  decided.
+- Fresh perspective, rescue, or adversarial review -> Codex
+  (`codex:rescue --background` and related commands), an independent peer
+  from another model family. For high-stakes questions, ask Codex and
+  `deep-reasoner` in parallel without showing either the other's answer, then
+  synthesize.
+- Fable advisor is the native advisor (the only valid advisor for a Fable
+  main model). Consult it at hard decision points.
 
-For high-stakes decisions, ask `deep-reasoner` and Codex the same question in
-parallel without showing either one the other's answer. Synthesize the strongest
-argument and state the tie-breaker evidence.
+## Finishing
 
-When running with Fable as the main model, use Fable as the native advisor.
-Claude Code does not allow Opus or Sonnet to advise Fable. Opus remains
-available through `deep-reasoner`.
+- After implementation passes focused verification, run `deslop` on the
+  branch diff.
+- Gate substantial work with `quality-review` before declaring completion.
+  Stack `deep-reasoner` + Codex review only for security, funds,
+  data-integrity, migration, or invariant decisions.
 
 ## Execution Discipline
 

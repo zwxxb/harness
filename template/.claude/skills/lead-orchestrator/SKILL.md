@@ -27,13 +27,15 @@ You are the lead orchestrator. You own the plan, decomposition, final synthesis,
 - `deep-reasoner`: Opus specialist for hard reasoning, architecture, debugging, algorithms, invariants, security-sensitive decisions, and high-stakes tradeoffs.
 - `fast-worker`: Sonnet worker for mechanical edits, boilerplate, tests, formatting, straightforward refactors, and executing a decided plan.
 - `codex:rescue`: OpenAI Codex peer for independent rescue, fresh-perspective debugging, adversarial review, or a second implementation path.
+- `deslop`: post-implementation cleanup skill. Run it on the branch diff after focused verification passes; delegate mechanical fixes to `fast-worker` for large diffs.
+- `quality-review`: strict maintainability review skill; the standard completion gate for substantial work.
 - Native advisor: when enabled, Fable advisor is the only valid advisor for a Fable main model. Ask for advisor consultation at hard decision points and before declaring a complex task complete.
 
 ## Default Workflow
 
 1. For broad features, behavior changes, architecture, or complex debugging, invoke `superpowers:brainstorming` before native `/plan` or implementation.
 2. Before broad code exploration, check GitNexus graph status with `./scripts/gitnexus-graph.sh status`. If missing or stale, kick off `./scripts/gitnexus-graph.sh analyze` in the background and proceed with `rg`/Read for the first pass; switch to GitNexus once the graph is ready.
-3. Use GitNexus resources/tools for code graph navigation: repo context, components, layers, tours, execution processes, symbol context, callers, and callees.
+3. Use GitNexus resources/tools for code graph navigation: `gitnexus://repos`, `gitnexus://repo/{name}/context`, `gitnexus://repo/{name}/understand/components`, `gitnexus://repo/{name}/understand/layers`, `gitnexus://repo/{name}/understand/tour`, `gitnexus://repo/{name}/process/{name}`, plus GitNexus query/context tools for concepts, flows, symbols, callers, and callees.
 4. Follow `superpowers:brainstorming`: explore context, ask clarifying questions one at a time, compare 2-3 approaches, present design, and save the approved spec to `docs/superpowers/specs/`.
 5. After the user approves the spec, invoke `superpowers:writing-plans` to create the implementation plan in `docs/superpowers/plans/`.
 6. For hard choices during brainstorming or plan writing, delegate to `deep-reasoner` before committing.
@@ -42,7 +44,8 @@ You are the lead orchestrator. You own the plan, decomposition, final synthesis,
 9. Delegate mechanical execution to `fast-worker` only after the plan is approved.
 10. Keep the main thread responsible for integration and final judgment.
 11. After edits, run the narrowest meaningful verification first, then broader repo commands when risk warrants it.
-12. Before final response on substantial work, run one completion gate (native advisor, `deep-reasoner`, Codex review, or `code-review-specialist`). Stack a second gate (`deep-reasoner` + Codex) only for security, funds, data-integrity, migration, or invariant decisions.
+12. After verification passes, run `deslop` on the branch diff to strip AI slop, then re-run the focused verification.
+13. Before final response on substantial work, run the `quality-review` completion gate, delegating structural analysis to `deep-reasoner` for large or high-stakes diffs. Stack a second gate (`deep-reasoner` + Codex) only for security, funds, data-integrity, migration, or invariant decisions.
 
 ## Delegation Heuristics
 
@@ -82,7 +85,8 @@ then superpowers:writing-plans to produce the implementation plan. Delegate
 reasoning to deep-reasoner, mechanical work to fast-worker, and
 fresh-perspective problems to Codex. Use GitNexus to build/check the code graph
 and navigate code before broad exploration. Do not execute until the
-Superpowers plan is approved.
+Superpowers plan is approved. After implementation verifies, run deslop, then
+gate completion with quality-review.
 ```
 
 Do not expose raw subagent transcripts unless useful. Summarize decisions and evidence.
