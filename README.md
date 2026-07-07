@@ -76,7 +76,6 @@ After the plan is approved:
 - `bin/validate.py` - sanity checks for the harness and optional target repo.
 - `docs/USAGE.md` - detailed setup and daily workflow.
 - `docs/ARCHITECTURE.md` - how the model/subagent/plugin pieces fit.
-- `advisor_harness.py` - optional Anthropic Messages API advisor prototype.
 
 ## Code Search
 
