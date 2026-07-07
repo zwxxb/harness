@@ -35,7 +35,8 @@ building — not as the primary architecture search tool.
   `deep-reasoner` in parallel without showing either the other's answer, then
   synthesize.
 - Fable advisor is the native advisor (the only valid advisor for a Fable
-  main model). Consult it at hard decision points.
+  main model). Consult it at hard decision points and before declaring
+  complex work complete.
 
 ## Finishing
 
@@ -47,6 +48,8 @@ building — not as the primary architecture search tool.
 
 ## Execution Discipline
 
+- Do implementation work on a feature branch or worktree, never directly on
+  the default branch — the finishing gates diff the branch against its base.
 - Read relevant files before editing them.
 - Prefer existing patterns and helper APIs.
 - Keep edits scoped.
