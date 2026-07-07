@@ -6,7 +6,8 @@ A reusable Claude Code harness for serious coding work:
 - Fable is the native advisor when Fable is the main model.
 - Opus is available as `deep-reasoner`.
 - Sonnet is available as `fast-worker`.
-- Superpowers drives planning: `brainstorming` first, then `writing-plans`.
+- Superpowers drives planning: `superpowers:brainstorming` first, then
+  `superpowers:writing-plans`.
 - GitNexus drives code search: build/check the code graph, then navigate flows,
   symbols, callers/callees, layers, and architecture from the graph.
 - Codex is available as an independent peer through the OpenAI Codex Claude Code plugin.

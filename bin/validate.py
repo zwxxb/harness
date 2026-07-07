@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -47,6 +48,22 @@ REQUIRED_TARGET_FILES = [
     "scripts/claude-sonnet-opus.sh",
     "scripts/gitnexus-graph.sh",
 ]
+
+DRIFT_DOC_FILES = [
+    "template/.claude/CLAUDE.md",
+    "template/.claude/skills/lead-orchestrator/SKILL.md",
+    "template/.claude/skills/deslop/SKILL.md",
+    "template/.claude/skills/quality-review/SKILL.md",
+    "README.md",
+    "docs/USAGE.md",
+    "docs/ARCHITECTURE.md",
+]
+
+# Tokens that look like agent/skill names but intentionally aren't ours.
+ALLOWED_REFERENCES: set[str] = set()
+
+FENCED_BLOCK = re.compile(r"```.*?```", re.DOTALL)
+NAME_TOKEN = re.compile(r"`([a-z][a-z0-9]*(?:-[a-z0-9]+)+)`")
 
 
 class Check:
@@ -104,6 +121,27 @@ def command_output(command: list[str], cwd: Path) -> tuple[int, str]:
     except Exception as exc:
         return 1, str(exc)
     return result.returncode, result.stdout.strip()
+
+
+def local_names() -> set[str]:
+    names = set()
+    for path in (TEMPLATE / ".claude/agents").glob("*.md"):
+        names.add(path.stem)
+    for path in (TEMPLATE / ".claude/skills").glob("*/SKILL.md"):
+        names.add(path.parent.name)
+    return names
+
+
+def validate_references(check: Check) -> None:
+    known = local_names() | ALLOWED_REFERENCES
+    for rel in DRIFT_DOC_FILES:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        text = FENCED_BLOCK.sub("", text)
+        unknown = sorted(set(NAME_TOKEN.findall(text)) - known)
+        message = f"{rel} references only existing agents/skills"
+        if unknown:
+            message += f" (unknown: {', '.join(unknown)})"
+        check.require(not unknown, message)
 
 
 def validate_package(check: Check) -> None:
@@ -172,6 +210,8 @@ def validate_package(check: Check) -> None:
         timeout=10,
     )
     check.require(status_proc.returncode == 0 and "Fable" in status_proc.stdout, "statusline renders Claude payload")
+
+    validate_references(check)
 
     claude = Path.home() / ".local/bin/claude"
     claude_bin = str(claude) if claude.exists() else shutil.which("claude")
