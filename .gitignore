@@ -2,5 +2,5 @@ __pycache__/
 *.pyc
 *.bak-*
 .DS_Store
-.env
-docs/superpowers/
+docs/
+plans/

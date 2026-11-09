@@ -1,256 +1,138 @@
 #!/usr/bin/env python3
-"""Validate the Claude coding harness package and optional installed target."""
-
-from __future__ import annotations
+"""Validate the review harness package, and optionally an installed repo."""
 
 import argparse
-import json
-import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
+from install import BEGIN, POINTER_FILES, ROOT, TEMPLATE, core_files
 
-ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = ROOT / "template"
-
-REQUIRED_TEMPLATE_FILES = [
-    "template/.claude/settings.json",
-    "template/.claude/CLAUDE.md",
-    "template/.claude/agents/deep-reasoner.md",
-    "template/.claude/agents/fast-worker.md",
-    "template/.claude/skills/lead-orchestrator/SKILL.md",
-    "template/.claude/skills/deslop/SKILL.md",
-    "template/.claude/skills/quality-review/SKILL.md",
-    "template/.claude/statusline.py",
-    "template/scripts/claude-lead.sh",
-    "template/scripts/claude-plan.sh",
-    "template/scripts/claude-sonnet-opus.sh",
-    "template/scripts/gitnexus-graph.sh",
-    "README.md",
-    "docs/USAGE.md",
-    "docs/ARCHITECTURE.md",
-]
-
-REQUIRED_TARGET_FILES = [
-    ".claude/settings.json",
-    ".claude/CLAUDE.md",
-    ".claude/agents/deep-reasoner.md",
-    ".claude/agents/fast-worker.md",
-    ".claude/skills/lead-orchestrator/SKILL.md",
-    ".claude/skills/deslop/SKILL.md",
-    ".claude/skills/quality-review/SKILL.md",
-    ".claude/statusline.py",
-    "scripts/claude-lead.sh",
-    "scripts/claude-plan.sh",
-    "scripts/claude-sonnet-opus.sh",
-    "scripts/gitnexus-graph.sh",
-]
-
-DRIFT_DOC_FILES = [
-    "template/.claude/CLAUDE.md",
-    "template/.claude/skills/lead-orchestrator/SKILL.md",
-    "template/.claude/skills/deslop/SKILL.md",
-    "template/.claude/skills/quality-review/SKILL.md",
-    "README.md",
-    "docs/USAGE.md",
-    "docs/ARCHITECTURE.md",
-]
-
-# Tokens that look like agent/skill names but intentionally aren't ours.
-ALLOWED_REFERENCES: set[str] = set()
-
-FENCED_BLOCK = re.compile(r"```.*?```", re.DOTALL)
-NAME_TOKEN = re.compile(r"`([a-z][a-z0-9]*(?:-[a-z0-9]+)+)`")
+SELF = Path(__file__).resolve()
+PASS_REF = re.compile(r"\.harness/passes/[a-z0-9-]+\.md")
+FORBIDDEN = ("gitnexus", ".claude/")  # removed by design; must not creep back
 
 
 class Check:
     def __init__(self) -> None:
         self.failures: list[str] = []
 
-    def ok(self, message: str) -> None:
-        print(f"ok  {message}")
-
-    def fail(self, message: str) -> None:
-        self.failures.append(message)
-        print(f"bad {message}")
-
-    def require(self, condition: bool, message: str) -> None:
+    def require(self, condition: bool, message: str, bad: list[str] | None = None) -> None:
         if condition:
-            self.ok(message)
-        else:
-            self.fail(message)
+            print(f"ok  {message}")
+            return
+        self.failures.append(message)
+        print(f"bad {message}" + (f": {', '.join(bad)}" if bad else ""))
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Validate the Claude coding harness.")
-    parser.add_argument("--target", type=Path, help="Optional installed target repo to validate.")
-    return parser.parse_args()
+def run(command: list[str], cwd: Path) -> tuple[int, str]:
+    result = subprocess.run(command, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    return result.returncode, result.stdout
 
 
-def json_file(path: Path, check: Check) -> dict:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        check.fail(f"{path} parses as JSON ({exc})")
-        return {}
-    check.ok(f"{path} parses as JSON")
-    return data
+def package_texts() -> dict[Path, str]:
+    return {
+        p: p.read_text(encoding="utf-8", errors="replace")
+        for p in ROOT.rglob("*")
+        if p.is_file() and not ({".git", "__pycache__"} & set(p.parts)) and p.resolve() != SELF
+    }
 
 
-def frontmatter(path: Path, required: list[str], check: Check) -> None:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        check.fail(f"{path} has frontmatter")
-        return
-    end = text.find("\n---\n", 4)
-    if end == -1:
-        check.fail(f"{path} closes frontmatter")
-        return
-    block = text[4:end]
-    keys = {line.split(":", 1)[0].strip() for line in block.splitlines() if ":" in line}
-    missing = [key for key in required if key not in keys]
-    check.require(not missing, f"{path} frontmatter has {', '.join(required)}")
+def gate_probe(check: Check, harness_dir: Path, label: str) -> None:
+    """Exercise the real gate on a scratch copy: init, block, pass, reject malformed."""
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        shutil.copytree(harness_dir, work / ".harness",
+                        ignore=shutil.ignore_patterns("__pycache__", "ledger.md", "rounds"))
+        gate = [sys.executable, ".harness/gate.py"]
+        ledger = work / ".harness/ledger.md"
 
+        code, _ = run(gate + ["--init"], work)
+        check.require(code == 0 and ledger.is_file(), f"{label}: --init creates a passing empty ledger")
+        seed = ledger.read_text(encoding="utf-8")
+        for record, expected, message in [
+            ("### F-901 [open] high", 1, "open high blocks"),
+            ("### F-901 [fixed] high", 0, "fixed high passes"),
+            ("### oops [broken] huge", 2, "malformed record is rejected"),
+        ]:
+            ledger.write_text(f"{seed}\n{record}\n", encoding="utf-8")
+            code, out = run(gate, work)
+            named = expected != 1 or "F-901" in out
+            check.require(code == expected and named, f"{label}: {message} (exit {expected})")
 
-def command_output(command: list[str], cwd: Path) -> tuple[int, str]:
-    try:
-        result = subprocess.run(command, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=10)
-    except Exception as exc:
-        return 1, str(exc)
-    return result.returncode, result.stdout.strip()
-
-
-def local_names() -> set[str]:
-    names = set()
-    for path in (TEMPLATE / ".claude/agents").glob("*.md"):
-        names.add(path.stem)
-    for path in (TEMPLATE / ".claude/skills").glob("*/SKILL.md"):
-        names.add(path.parent.name)
-    return names
-
-
-def validate_references(check: Check) -> None:
-    known = local_names() | ALLOWED_REFERENCES
-    for rel in DRIFT_DOC_FILES:
-        text = (ROOT / rel).read_text(encoding="utf-8")
-        text = FENCED_BLOCK.sub("", text)
-        unknown = sorted(set(NAME_TOKEN.findall(text)) - known)
-        message = f"{rel} references only existing agents/skills"
-        if unknown:
-            message += f" (unknown: {', '.join(unknown)})"
-        check.require(not unknown, message)
+        ledger.write_text(seed, encoding="utf-8")
+        code, _ = run(gate + ["--done"], work)
+        check.require(code == 1, f"{label}: --done fails without round reports")
+        (work / ".harness/rounds").mkdir()
+        for n in (1, 2):
+            (work / f".harness/rounds/round-0{n}.md").write_text("report", encoding="utf-8")
+        code, _ = run(gate + ["--done"], work)
+        check.require(code == 0, f"{label}: --done passes with a clean ledger and two rounds")
 
 
 def validate_package(check: Check) -> None:
-    for rel in REQUIRED_TEMPLATE_FILES:
-        path = ROOT / rel
-        check.require(path.exists(), f"{rel} exists")
+    texts = package_texts()
+    pass_files = {f".harness/passes/{p.name}" for p in (TEMPLATE / ".harness/passes").glob("*.md")}
+    refs = set(PASS_REF.findall(texts[TEMPLATE / "HARNESS.md"]))
+    check.require(refs == pass_files, "HARNESS.md references every pass file and nothing else",
+                  sorted(refs ^ pass_files))
+    dangling = sorted({f"{ref} in {p.relative_to(ROOT)}" for p, t in texts.items()
+                       for ref in PASS_REF.findall(t) if ref not in pass_files})
+    check.require(not dangling, "every pass reference resolves", dangling)
+    hits = sorted(str(p.relative_to(ROOT)) for p, t in texts.items()
+                  if any(token in t.lower() for token in FORBIDDEN))
+    check.require(not hits, f"no references to removed tooling ({', '.join(FORBIDDEN)})", hits)
 
-    settings = json_file(TEMPLATE / ".claude/settings.json", check)
-    plugins = settings.get("enabledPlugins", {})
-    check.require(plugins.get("superpowers@superpowers-dev") is True, "template enables Superpowers plugin")
-    check.require(plugins.get("codex@openai-codex") is True, "template enables Codex plugin")
-    check.require(settings.get("model") == "fable", "template main model is fable")
-    check.require(settings.get("advisorModel") == "fable", "template advisor model is fable")
+    gate_probe(check, TEMPLATE / ".harness", "gate")
 
-    allow = settings.get("permissions", {}).get("allow")
-    check.require(
-        isinstance(allow, list) and bool(allow) and all(isinstance(item, str) for item in allow),
-        "template settings has non-empty permissions.allow string list",
-    )
-    session_start = settings.get("hooks", {}).get("SessionStart", [])
-    hook_commands = [
-        hook.get("command", "")
-        for entry in session_start
-        for hook in entry.get("hooks", [])
-    ]
-    check.require(
-        any("gitnexus-graph.sh" in command for command in hook_commands),
-        "template settings has GitNexus SessionStart hook",
-    )
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp)
+        (target / "AGENTS.md").write_text("# Existing rules\nkeep me\n", encoding="utf-8")
+        install = [sys.executable, str(ROOT / "bin/install.py"), "--target", str(target)]
 
-    frontmatter(TEMPLATE / ".claude/agents/deep-reasoner.md", ["name", "description", "model"], check)
-    frontmatter(TEMPLATE / ".claude/agents/fast-worker.md", ["name", "description", "model"], check)
-    frontmatter(TEMPLATE / ".claude/skills/lead-orchestrator/SKILL.md", ["name", "description"], check)
-    frontmatter(TEMPLATE / ".claude/skills/deslop/SKILL.md", ["name", "description"], check)
-    frontmatter(TEMPLATE / ".claude/skills/quality-review/SKILL.md", ["name", "description"], check)
+        code, _ = run(install, ROOT)
+        expected = [str(p.relative_to(TEMPLATE)) for p in core_files()] + list(POINTER_FILES) + [".harness/ledger.md"]
+        missing = [rel for rel in expected if not (target / rel).is_file()]
+        check.require(code == 0 and not missing, "install writes the core, pointers, and ledger", missing)
+        agents = (target / "AGENTS.md").read_text(encoding="utf-8")
+        check.require("keep me" in agents and agents.count(BEGIN) == 1,
+                      "pointer block is added once and existing AGENTS.md content is kept")
 
-    plan_text = (TEMPLATE / "scripts/claude-plan.sh").read_text(encoding="utf-8")
-    check.require("superpowers:brainstorming" in plan_text, "planning launcher mentions superpowers:brainstorming")
-    check.require("superpowers:writing-plans" in plan_text, "planning launcher mentions superpowers:writing-plans")
+        code, out = run(install, ROOT)
+        changed = [line for line in out.splitlines() if line.startswith(("write", "update", "backup"))]
+        check.require(code == 0 and not changed, "re-install is idempotent", changed)
 
-    claude_md = (TEMPLATE / ".claude/CLAUDE.md").read_text(encoding="utf-8")
-    orchestrator = (TEMPLATE / ".claude/skills/lead-orchestrator/SKILL.md").read_text(encoding="utf-8")
-    check.require("GitNexus" in claude_md, "CLAUDE.md makes GitNexus primary for code search")
-    check.require("gitnexus://repo" in orchestrator, "lead-orchestrator owns GitNexus resource URIs")
-    check.require("gitnexus-graph.sh analyze" in orchestrator, "lead-orchestrator checks/builds GitNexus graph")
-    check.require("deslop" in claude_md and "quality-review" in claude_md, "CLAUDE.md wires deslop and quality-review")
-    check.require("deslop" in orchestrator and "quality-review" in orchestrator, "lead-orchestrator wires deslop and quality-review")
+        (target / "HARNESS.md").write_text("local edit", encoding="utf-8")
+        code, _ = run(install + ["--force"], ROOT)
+        check.require(code == 0 and any(target.glob("HARNESS.md.bak-*")), "--force backs up before overwriting")
 
-    probe = {
-        "workspace": {"current_dir": str(ROOT)},
-        "model": {"display_name": "Fable"},
-        "effort": {"level": "max"},
-        "context_window": {"used_percentage": 12.3},
-        "cost": {"total_cost_usd": 0.12},
-        "version": "test",
-    }
-    code, output = command_output(["python3", str(TEMPLATE / ".claude/statusline.py")], ROOT)
-    check.require(code == 0, "statusline runs with empty input")
-    status_proc = subprocess.run(
-        ["python3", str(TEMPLATE / ".claude/statusline.py")],
-        cwd=ROOT,
-        input=json.dumps(probe),
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=10,
-    )
-    check.require(status_proc.returncode == 0 and "Fable" in status_proc.stdout, "statusline renders Claude payload")
-
-    validate_references(check)
-
-    claude = Path.home() / ".local/bin/claude"
-    claude_bin = str(claude) if claude.exists() else shutil.which("claude")
-    if claude_bin:
-        code, output = command_output([claude_bin, "--version"], ROOT)
-        check.require(code == 0, f"Claude Code available ({output})")
-    else:
-        check.fail("Claude Code binary available")
+        ledger = target / ".harness/ledger.md"
+        before = ledger.read_text(encoding="utf-8")
+        validate_target(check, target)
+        check.require(ledger.read_text(encoding="utf-8") == before, "target validation leaves the ledger untouched")
 
 
-def validate_target(target: Path, check: Check) -> None:
-    target = target.expanduser().resolve()
-    check.require(target.exists(), f"target exists: {target}")
-    for rel in REQUIRED_TARGET_FILES:
-        check.require((target / rel).exists(), f"target has {rel}")
-    if (target / ".claude/settings.json").exists():
-        json_file(target / ".claude/settings.json", check)
-    for rel in ["scripts/claude-lead.sh", "scripts/claude-plan.sh", "scripts/claude-sonnet-opus.sh", "scripts/gitnexus-graph.sh"]:
-        path = target / rel
-        if path.exists():
-            check.require(os.access(path, os.X_OK), f"{rel} is executable")
-    if (target / "scripts/claude-lead.sh").exists():
-        code, output = command_output([str(target / "scripts/claude-lead.sh"), "--version"], target)
-        check.require(code == 0, f"target launcher runs ({output})")
+def validate_target(check: Check, target: Path) -> None:
+    expected = [str(p.relative_to(TEMPLATE)) for p in core_files()] + [".harness/ledger.md"]
+    missing = [rel for rel in expected if not (target / rel).is_file()]
+    check.require(not missing, "target has the harness core and ledger", missing)
+    gate_probe(check, target / ".harness", "target gate")
 
 
 def main() -> int:
-    args = parse_args()
+    parser = argparse.ArgumentParser(description="Validate the review harness.")
+    parser.add_argument("--target", type=Path, help="Installed repo to validate as well.")
+    args = parser.parse_args()
+
     check = Check()
     validate_package(check)
     if args.target:
-        validate_target(args.target, check)
-    if check.failures:
-        print("\nFailures:")
-        for failure in check.failures:
-            print(f"- {failure}")
-        return 1
-    print("\nAll checks passed.")
-    return 0
+        validate_target(check, args.target.expanduser().resolve())
+    print(f"\nFAILED: {len(check.failures)} check(s)" if check.failures else "\nAll checks passed.")
+    return 1 if check.failures else 0
 
 
 if __name__ == "__main__":

@@ -1,129 +1,88 @@
 #!/usr/bin/env python3
-"""Install the Claude coding harness template into a target repository."""
+"""Install the review harness into a target repository.
 
-from __future__ import annotations
+Copies HARNESS.md and .harness/ (gate + passes), adds a pointer block to
+AGENTS.md, CLAUDE.md, and GEMINI.md (existing content is kept), and creates
+the ledger.
+"""
 
 import argparse
-import json
+import re
 import shutil
-import stat
+import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
-
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "template"
 
+# AGENTS.md is read natively by most coding agents; Claude Code and Gemini CLI
+# read their own file by default.
+POINTER_FILES = ("AGENTS.md", "CLAUDE.md", "GEMINI.md")
+BEGIN, END = "<!-- harness:begin -->", "<!-- harness:end -->"
+POINTER = f"""{BEGIN}
+## Review harness
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Install the Claude coding harness into a repo.")
-    parser.add_argument("--target", type=Path, default=Path.cwd(), help="Target repository root.")
-    parser.add_argument("--force", action="store_true", help="Overwrite existing files after backing them up.")
-    parser.add_argument("--dry-run", action="store_true", help="Show planned changes without writing.")
-    return parser.parse_args()
-
-
-def read_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def merge_settings(existing: Any, template: Any) -> Any:
-    if isinstance(existing, dict) and isinstance(template, dict):
-        merged = dict(existing)
-        for key, value in template.items():
-            if key in merged:
-                merged[key] = merge_settings(merged[key], value)
-            else:
-                merged[key] = value
-        return merged
-    if isinstance(existing, list) and isinstance(template, list):
-        merged = list(existing)
-        for item in template:
-            if item not in merged:
-                merged.append(item)
-        return merged
-    return template
+For any substantial change, read and follow `HARNESS.md`: review rounds
+(hunt, triage, fix, prove, regress) until `python3 .harness/gate.py` exits 0,
+then a deslop + simplify pass and one clean confirmation round.
+{END}
+"""
+BLOCK = re.compile(re.escape(BEGIN) + ".*?" + re.escape(END) + "\n?", re.DOTALL)
 
 
-def backup(path: Path) -> Path:
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    backup_path = path.with_name(f"{path.name}.bak-{stamp}")
-    shutil.copy2(path, backup_path)
-    return backup_path
+def core_files() -> list[Path]:
+    return sorted(p for p in TEMPLATE.rglob("*") if p.is_file() and "__pycache__" not in p.parts)
 
 
-def write_file(path: Path, content: bytes, executable: bool, dry_run: bool) -> None:
-    if dry_run:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(content)
-    if executable:
-        mode = path.stat().st_mode
-        path.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-
-
-def install_file(source: Path, target: Path, force: bool, dry_run: bool) -> str:
-    executable = bool(source.stat().st_mode & stat.S_IXUSR) or source.suffix == ".sh"
+def install_core(source: Path, target: Path, force: bool) -> str:
     content = source.read_bytes()
-
-    if source.relative_to(TEMPLATE).as_posix() == ".claude/settings.json" and target.exists():
-        merged = merge_settings(read_json(target), read_json(source))
-        content = (json.dumps(merged, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
-
     if target.exists() and target.read_bytes() == content:
         return f"unchanged {target}"
-
-    if target.exists() and not force and source.relative_to(TEMPLATE).as_posix() != ".claude/settings.json":
-        return f"skip existing {target} (use --force to overwrite)"
-
+    if target.exists() and not force:
+        return f"skip changed {target} (use --force to overwrite)"
     note = "write"
     if target.exists():
-        note = f"backup {backup(target) if not dry_run else target.with_suffix(target.suffix + '.bak-*')} then write"
-    write_file(target, content, executable, dry_run)
+        backup = target.with_name(f"{target.name}.bak-{time.strftime('%Y%m%d-%H%M%S')}")
+        shutil.copy2(target, backup)
+        note = f"backup to {backup.name} and write"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(content)
     return f"{note} {target}"
 
 
-def iter_template_files() -> list[Path]:
-    ignored_parts = {"__pycache__", ".DS_Store"}
-    files: list[Path] = []
-    for path in TEMPLATE.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in ignored_parts for part in path.parts):
-            continue
-        if path.suffix in {".pyc", ".pyo"}:
-            continue
-        files.append(path)
-    return sorted(files)
+def install_pointer(target: Path) -> str:
+    text = target.read_text(encoding="utf-8") if target.exists() else ""
+    if BLOCK.search(text):
+        updated = BLOCK.sub(lambda _: POINTER, text, count=1)
+    else:
+        updated = text.rstrip("\n") + "\n\n" + POINTER if text.strip() else POINTER
+    if updated == text:
+        return f"unchanged {target}"
+    target.write_text(updated, encoding="utf-8")
+    return f"{'update' if text else 'write'} {target}"
 
 
 def main() -> int:
-    args = parse_args()
-    target_root = args.target.expanduser().resolve()
-    if not TEMPLATE.exists():
-        print(f"Template missing: {TEMPLATE}", file=sys.stderr)
-        return 1
-    if not target_root.exists():
-        print(f"Target does not exist: {target_root}", file=sys.stderr)
-        return 1
-    if not target_root.is_dir():
-        print(f"Target is not a directory: {target_root}", file=sys.stderr)
+    parser = argparse.ArgumentParser(description="Install the review harness into a repo.")
+    parser.add_argument("--target", type=Path, default=Path.cwd(), help="Target repository root.")
+    parser.add_argument("--force", action="store_true", help="Overwrite changed harness files after a backup.")
+    args = parser.parse_args()
+
+    root = args.target.expanduser().resolve()
+    if not root.is_dir():
+        print(f"Target is not a directory: {root}", file=sys.stderr)
         return 1
 
-    actions: list[str] = []
-    for source in iter_template_files():
-        rel = source.relative_to(TEMPLATE)
-        actions.append(install_file(source, target_root / rel, args.force, args.dry_run))
-
-    for action in actions:
-        print(action)
-
-    if args.dry_run:
-        print("Dry run only. No files changed.")
-    else:
-        print(f"Installed harness into {target_root}")
+    for source in core_files():
+        print(install_core(source, root / source.relative_to(TEMPLATE), args.force))
+    for name in POINTER_FILES:
+        print(install_pointer(root / name))
+    if not (root / ".harness/ledger.md").exists():
+        subprocess.run([sys.executable, ".harness/gate.py", "--init"], cwd=root, check=True, capture_output=True)
+        print(f"write {root / '.harness/ledger.md'}")
+    print(f"Installed into {root}. Gate: python3 .harness/gate.py")
     return 0
 
 
