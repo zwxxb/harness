@@ -1,152 +1,181 @@
 # Review Harness
 
-A multi-round code review loop that runs in any coding agent. The protocol is
-markdown (`HARNESS.md`). The exit condition is a stdlib Python script
-(`.harness/gate.py`). No vendor models, plugins, or shell scripts.
+Plan, build, and review code with any AI coding agent, in rounds, until no
+critical, high, or medium finding remains.
 
-## The loop
+The workflow is plain markdown (`HARNESS.md`). Completion is checked by a
+standard-library Python script (`.harness/gate.py`). It needs no plugins,
+vendor-specific configuration, or shell scripts, so it works with any agent
+that can read files, edit files, and run commands.
 
-```text
-Before:   BRAINSTORM -> PLAN -> EXECUTE   (approved design, task plan, TDD commits)
+## Requirements
 
-Round N:  HUNT -> TRIAGE -> FIX -> PROVE -> REGRESS -> GATE
-          repeat until the gate reports zero open critical/high/medium
+- Python 3.10 or newer (standard library only)
+- Git
+- A coding agent with file and shell access
 
-First clean gate -> DESLOP + SIMPLIFY -> re-verify -> one full confirmation round
-Done:     python3 .harness/gate.py --done   (clean ledger + two round reports)
+## Quick start
+
+```bash
+git clone https://github.com/zwxxb/harness
+cd harness
+python3 bin/validate.py                         # self-test: gate and installer
+python3 bin/install.py --target /path/to/repo   # install into a project
 ```
 
-- Findings go into an append-only ledger (`.harness/ledger.md`) with a
-  severity: critical, high, medium, low, or info.
-- The gate blocks on critical, high, and medium. Severity is never lowered to
-  pass the gate; only the user can waive a finding.
-- `MAX_ROUNDS = 6` and a stall rule end the loop with an honest report
-  instead of looping silently.
+Then, in the project, give your agent the task:
 
-## The passes
+```text
+Run the HARNESS.md loop for: <goal, constraints, relevant files, how to test>
+```
 
-Each step has a checklist in `.harness/passes/`, adapted from
-[obra/superpowers](https://github.com/obra/superpowers) and
-[Trail of Bits](https://github.com/trailofbits/skills) skills. If the real
-skills are installed, agents use them instead.
+To upgrade an installed project, run the installer again with `--force`;
+changed files are backed up as `<file>.bak-<timestamp>`. To check an
+installed project, run `python3 bin/validate.py --target /path/to/repo`.
 
-| Step | Pass file | Adapted from |
+## How it works
+
+```text
+Plan       BRAINSTORM -> PLAN -> EXECUTE
+Review     HUNT -> TRIAGE -> FIX -> PROVE -> REGRESS -> GATE   (repeat until clean)
+Finish     DESLOP + SIMPLIFY -> one full confirmation round -> gate.py --done
+```
+
+1. **Plan.** The agent agrees on a design with you, writes a task-by-task
+   plan, and implements it with tests first. No product code is written
+   before the design is approved.
+2. **Review.** Each round hunts for problems, confirms that each finding is
+   real, fixes it at the root, proves the fix against the baseline, and
+   checks the fix for regressions. Findings are recorded in an append-only
+   ledger with a severity.
+3. **Finish.** When no critical, high, or medium finding is open, the agent
+   removes AI slop, simplifies the code, and runs one more full round. The
+   work is done when `gate.py --done` passes.
+
+The loop stops after six rounds, or when two rounds in a row add no new
+medium or higher finding while blockers remain. It then reports every unresolved finding instead
+of passing. Severity is never lowered to pass the gate; only you can waive a
+finding.
+
+## Workflow steps
+
+Each step is a checklist in `.harness/passes/`. If the original skills are
+installed in your agent, they are used instead.
+
+| Step | Checklist | Based on |
 |---|---|---|
-| BRAINSTORM | `plan-brainstorm.md` | superpowers brainstorming |
-| PLAN | `plan-write.md` | superpowers writing-plans |
-| EXECUTE | `execute-plan.md` | superpowers executing-plans, subagent-driven-development |
-| HUNT | `review-thermonuclear.md` | Cursor thermo-nuclear review, ToB differential-review |
-| TRIAGE | `triage-fp-check.md` | ToB fp-check |
-| FIX | `fix-patching-bugs.md` | ToB patching-bugs, implement-patch, variant-analysis |
-| PROVE | `prove-post-patch-validation.md` | ToB post-patch-validation, prove-patch |
-| REGRESS | `regression-hunt.md` | ToB regression-hunt |
-| final | `final-deslop-simplify.md` | Cursor deslop |
+| Brainstorm | `plan-brainstorm.md` | superpowers: brainstorming |
+| Plan | `plan-write.md` | superpowers: writing-plans |
+| Execute | `execute-plan.md` | superpowers: executing-plans, subagent-driven-development |
+| Hunt | `review-thermonuclear.md` | Cursor thermo-nuclear review; Trail of Bits: differential-review |
+| Triage | `triage-fp-check.md` | Trail of Bits: fp-check |
+| Fix | `fix-patching-bugs.md` | Trail of Bits: patching-bugs, implement-patch, variant-analysis |
+| Prove | `prove-post-patch-validation.md` | Trail of Bits: post-patch-validation, prove-patch |
+| Regress | `regression-hunt.md` | Trail of Bits: regression-hunt |
+| Finish | `final-deslop-simplify.md` | Cursor deslop |
+
+## The gate
+
+| Command | Result |
+|---|---|
+| `python3 .harness/gate.py` | `0` when no critical, high, or medium finding is open; `1` when one is (the blocking ids are listed); `2` when the ledger is malformed |
+| `python3 .harness/gate.py --done` | Also requires two round reports. This is the completion check |
+| `python3 .harness/gate.py --json` | Counts and blocking ids as JSON |
+| `python3 .harness/gate.py --init` | Creates a missing ledger |
+
+A finding moves from `open` to `confirmed` to `fixed`, and `fixed` needs a
+commit and a proof. Otherwise it ends as `wontfix` (a false positive, with
+evidence) or `waived` (your decision only). Severity definitions are in
+`HARNESS.md`.
 
 ## Model tiers
 
-Roles depend on capability, not vendor:
+Work is assigned by capability, so any provider's models can be used.
 
 | Tier | Model | Work |
 |---|---|---|
-| A (deep) | the strongest model available (expensive) | planning, architecture, security and invariant analysis, hard root causes, adjudication |
-| B (fast) | the cheapest model that follows instructions reliably | implementing plan tasks, bookkeeping, test scaffolding, sweeps, reports |
+| A | The strongest model available | Design, planning, architecture, security and invariant analysis, adjudication |
+| B | The cheapest model that follows instructions reliably | Implementing plan tasks, test scaffolding, bookkeeping, sweeps |
 
-`HARNESS.md` lists which steps can run in parallel and which must run in
-order. It also requires one writer per worktree and fresh-context reviewers.
+`HARNESS.md` also lists which steps can run in parallel and which must run
+in order. It requires one writer per worktree and reviewers with fresh
+context.
 
 ## Agent compatibility
 
-The installer adds a marked pointer block to three files. Existing content is
-kept, and re-installs update the block in place.
+The installer adds a short, marked pointer block to the files that agents
+read. Existing content is kept, and re-running the installer updates the
+block in place.
 
 | File | Read by |
 |---|---|
-| `AGENTS.md` | Codex, Cursor, GitHub Copilot, Windsurf, goose, Zed, opencode, Amp, Jules, Factory, Roo Code, Kilo Code, Warp, Devin, Junie, Augment, Prime Agent |
+| `AGENTS.md` | Codex, Cursor, GitHub Copilot, Windsurf, Gemini CLI (when configured), goose, Zed, opencode, Amp, Jules, Factory, Roo Code, Kilo Code, Warp, Devin, Junie, Augment, Prime Agent |
 | `CLAUDE.md` | Claude Code |
-| `GEMINI.md` | Gemini CLI |
+| `GEMINI.md` | Gemini CLI (default) |
 
-For Aider, run `aider --read AGENTS.md`. For any other agent, tell it once to
-read `HARNESS.md`. An agent only needs to read files, edit files, and run
-`python3`.
+For Aider, run `aider --read AGENTS.md`. Any other agent can be pointed at
+`HARNESS.md` directly.
 
-**Prime Agent** finds `AGENTS.md` on its own. To map the tiers, pass a model
-to `rlm.spawn(prompt, name=..., model=...)`; `rlm.find_models()` lists the
-available models. Trail of Bits skills under `~/.prime/agent/skills/` are
-used directly. To run the loop unattended, with the gate as the stop
-condition:
+## Unattended runs
+
+Any runner that repeats work until a command succeeds can use
+`python3 .harness/gate.py --done` as its completion check. With Prime Agent,
+for example:
 
 ```bash
 prime-agent --autonomous --autonomous-gate "python3 .harness/gate.py --done" \
-  --autonomous-gate-retries 6 --autonomous-max-turns 200 --autonomous-max-tokens 2000000 \
+  --autonomous-max-turns 200 --autonomous-max-tokens 2000000 \
   "Run the HARNESS.md loop for: <task>"
 ```
 
-The default autonomous limits (12 turns, 80k tokens) are too small for a
-multi-round loop. The limits above are example values.
+A multi-round loop needs much higher turn and token limits than a single
+task; the values above are a starting point. When no one is available to
+answer questions, the request is treated as the approved spec, and every
+decision the agent makes is recorded in the design doc and the plan.
 
-## Install
+## Optional: semantic code search
 
-```bash
-git clone https://github.com/zwxxb/harness && cd harness
-python3 bin/validate.py                                 # live gate and installer tests
-python3 bin/install.py --target ~/projects/your-repo    # --force upgrades changed files, with backups
-python3 bin/validate.py --target ~/projects/your-repo   # check an installed repo
-```
-
-Then prompt your agent in the repo:
-
-```text
-Run the HARNESS.md loop for: <goal, constraints, files, tests>
-```
-
-## Code search (optional): zvec-grep
+[zvec-grep](https://github.com/zvec-ai/zvec-grep) adds search by meaning
+alongside exact-match search. The workflow uses it when it is available and
+falls back to `rg` otherwise.
 
 ```bash
 npm install -g @zvec/zvec-grep --allow-scripts=@zvec/zvec-grep
-cd ~/projects/your-repo
+cd /path/to/repo
 zg --index --embedding local/potion-retrieval-32m
 zg --install --target <agent> --yes   # codex, claude, cursor, copilot, opencode, vscode, ...
 ```
 
-Agents without a zvec-grep integration, Prime Agent included, can call the
-`zg` CLI directly.
+## Design principles
 
-## The gate
+- **One source of truth.** `HARNESS.md` holds the whole protocol. The
+  pointer blocks only reference it.
+- **The gate decides.** Completion is computed from the ledger; the model
+  does not judge its own work.
+- **Evidence over assertion.** Findings are confirmed before they are
+  patched. Fixes are proven against the baseline. Reviewers work from
+  files, not summaries.
+- **Cleanup is reviewed too.** The final cleanup gets a full review round,
+  and its edits are reverted if behavior changes.
+- **No lock-in.** `bin/validate.py` fails if vendor-specific configuration
+  or removed tools reappear.
 
-```bash
-python3 .harness/gate.py          # 0 clean, 1 blocked (lists ids), 2 ledger error
-python3 .harness/gate.py --done   # final check: clean ledger + two round reports
-python3 .harness/gate.py --json   # counts and blocking ids
-python3 .harness/gate.py --init   # recreate a missing ledger
-```
-
-Ledger statuses: `open` -> `confirmed` -> `fixed` (needs commit + proof), or
-`wontfix` (false positive, with evidence), or `waived` (user decision only).
-
-## Design
-
-- **Agree before building.** No product code is written until the design
-  is approved. The plan holds the decisions, so a cheap model can implement
-  it. Unattended runs treat the request as the spec and record every call.
-- **One protocol.** `HARNESS.md` is the only copy. Each pointer block is a
-  few lines, so there is nothing to keep in sync.
-- **The gate decides, not the model.** Pass/fail is arithmetic over ledger
-  headings. Findings change status but never disappear. Severity changes
-  only in triage, with evidence.
-- **Evidence over assertion.** Triage proves a finding is real before
-  anyone patches it. Proofs compare the baseline with the patch. Reviewers
-  start fresh and work from files, not summaries.
-- **Cleanup re-enters the loop.** Deslop edits get a full confirmation
-  round, and they are reverted if they break behavior.
-- **No vendor lock-in.** The harness has no settings files, subagent
-  definitions, plugins, or launch scripts. A drift guard in
-  `bin/validate.py` keeps them out.
-
-## Layout
+## Repository layout
 
 ```text
-bin/install.py        copies the core, adds pointer blocks, creates the ledger
-bin/validate.py       live gate tests, installer round trip, drift guard
-template/HARNESS.md   the protocol
-template/.harness/    gate.py (holds the ledger template) and the six passes
+bin/install.py        Installs the core, adds the pointer blocks, creates the ledger
+bin/validate.py       Self-test: gate behavior, installer round trip, drift guard
+template/HARNESS.md   The protocol
+template/.harness/    The gate and the nine step checklists
 ```
+
+## Acknowledgements
+
+The step checklists adapt work from:
+
+- [obra/superpowers](https://github.com/obra/superpowers): brainstorming,
+  writing-plans, executing-plans, subagent-driven-development
+- [Trail of Bits skills](https://github.com/trailofbits/skills): fp-check,
+  patching-bugs, implement-patch, variant-analysis, post-patch-validation,
+  prove-patch, differential-review, regression-hunt
+- Cursor team kit: deslop and the thermo-nuclear code quality review
