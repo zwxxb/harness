@@ -7,6 +7,8 @@ markdown (`HARNESS.md`). The exit condition is a stdlib Python script
 ## The loop
 
 ```text
+Before:   BRAINSTORM -> PLAN -> EXECUTE   (approved design, task plan, TDD commits)
+
 Round N:  HUNT -> TRIAGE -> FIX -> PROVE -> REGRESS -> GATE
           repeat until the gate reports zero open critical/high/medium
 
@@ -23,11 +25,16 @@ Done:     python3 .harness/gate.py --done   (clean ledger + two round reports)
 
 ## The passes
 
-Each step has a checklist in `.harness/passes/`, adapted from Trail of Bits
-skills. If the real skills are installed, agents use them instead.
+Each step has a checklist in `.harness/passes/`, adapted from
+[obra/superpowers](https://github.com/obra/superpowers) and
+[Trail of Bits](https://github.com/trailofbits/skills) skills. If the real
+skills are installed, agents use them instead.
 
 | Step | Pass file | Adapted from |
 |---|---|---|
+| BRAINSTORM | `plan-brainstorm.md` | superpowers brainstorming |
+| PLAN | `plan-write.md` | superpowers writing-plans |
+| EXECUTE | `execute-plan.md` | superpowers executing-plans, subagent-driven-development |
 | HUNT | `review-thermonuclear.md` | Cursor thermo-nuclear review, ToB differential-review |
 | TRIAGE | `triage-fp-check.md` | ToB fp-check |
 | FIX | `fix-patching-bugs.md` | ToB patching-bugs, implement-patch, variant-analysis |
@@ -42,7 +49,7 @@ Roles depend on capability, not vendor:
 | Tier | Model | Work |
 |---|---|---|
 | A (deep) | the strongest model available (expensive) | planning, architecture, security and invariant analysis, hard root causes, adjudication |
-| B (fast) | the cheapest model that follows instructions reliably | bookkeeping, test scaffolding, pre-decided edits, sweeps, reports |
+| B (fast) | the cheapest model that follows instructions reliably | implementing plan tasks, bookkeeping, test scaffolding, sweeps, reports |
 
 `HARNESS.md` lists which steps can run in parallel and which must run in
 order. It also requires one writer per worktree and fresh-context reviewers.
@@ -118,6 +125,9 @@ Ledger statuses: `open` -> `confirmed` -> `fixed` (needs commit + proof), or
 
 ## Design
 
+- **Agree before building.** No product code is written until the design
+  is approved. The plan holds the decisions, so a cheap model can implement
+  it. Unattended runs treat the request as the spec and record every call.
 - **One protocol.** `HARNESS.md` is the only copy. Each pointer block is a
   few lines, so there is nothing to keep in sync.
 - **The gate decides, not the model.** Pass/fail is arithmetic over ledger

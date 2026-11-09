@@ -45,6 +45,8 @@ data shapes; narrow edge-case handling in the middle of a busy function;
   critical.
 - Regression watch: if history shows a similar fix nearby, verify this change
   does not undo it.
+- If a plan exists, check its review focus and global constraints against
+  the diff; an untested review-focus item is a finding.
 - Missing tests on modified behavior: medium. A test that passes but does not
   prove the property under discussion: medium.
 

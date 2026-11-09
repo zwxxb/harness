@@ -18,8 +18,8 @@ Skip it for: typo fixes, comment-only edits, generated files, formatting.
 
 ## Ground rules
 
-1. Plan before editing: write down the approach, the invariants it touches,
-   and how you will verify it. Ask the user when requirements are ambiguous.
+1. Plan before building: run the steps in "Before the loop". No product
+   code before the design is agreed.
 2. Branch discipline: never work on the default branch. The gates diff the
    branch against its base.
 3. Verify through the project's own documented commands (its normal build and
@@ -42,6 +42,18 @@ Skip it for: typo fixes, comment-only edits, generated files, formatting.
 | info | notes, observations, follow-up ideas |
 
 The gate blocks on critical, high, and medium. Low and info stay recorded.
+
+## Before the loop
+
+| Step | Pass | Output |
+|---|---|---|
+| BRAINSTORM | `.harness/passes/plan-brainstorm.md` | approved design doc in `docs/superpowers/specs/` |
+| PLAN | `.harness/passes/plan-write.md` | task-by-task plan in `docs/superpowers/plans/` |
+| EXECUTE | `.harness/passes/execute-plan.md` | TDD commits on the branch, one task at a time |
+
+Size the process to the work: a clear small change gets a one-line design
+and plan. When the user opts out of questions or the run is unattended, the
+request is the approved spec and every call you make is recorded.
 
 ## The loop
 
@@ -66,8 +78,8 @@ harness actually has:
 
 | Tier | Model class | Owns |
 |---|---|---|
-| **A — deep** | the strongest, smartest model available (expensive) | architecture and schema/protocol choices; security and invariant analysis; root-cause analysis on confusing bugs; structural analysis of large diffs in HUNT; adversarial review of fixes; adjudication and tie-breaks |
-| **B — fast** | the cheapest model that can follow instructions reliably (cheap) | mechanical ledger bookkeeping, test scaffolding, applying pre-decided edits, sweeps and searches, formatting, report assembly, command running |
+| **A — deep** | the strongest, smartest model available (expensive) | brainstorming, design, and planning; architecture and schema/protocol choices; security and invariant analysis; root-cause analysis on confusing bugs; structural analysis of large diffs in HUNT; adversarial review of fixes; adjudication and tie-breaks |
+| **B — fast** | the cheapest model that can follow instructions reliably (cheap) | implementing plan tasks (the plan carries the design), mechanical ledger bookkeeping, test scaffolding, applying pre-decided edits, sweeps and searches, formatting, report assembly, command running |
 
 Rules that hold whether or not your harness supports subagents:
 
@@ -125,7 +137,9 @@ and regex. Without zvec-grep, rg alone is fine.
 
 ## Installed skills
 
-If your environment has any Trail of Bits skills installed (fp-check,
+If your environment has the obra/superpowers skills installed (brainstorming,
+writing-plans, executing-plans, subagent-driven-development), use them for
+the steps before the loop. If it has any Trail of Bits skills installed (fp-check,
 patching-bugs, post-patch-validation, prove-patch, validate-bug,
 differential-review, variant-analysis, regression-hunt, semgrep, codeql), prefer invoking them
 for the matching pass. The pass files embed their contracts so the loop also

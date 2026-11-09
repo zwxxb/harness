@@ -24,9 +24,10 @@ BEGIN, END = "<!-- harness:begin -->", "<!-- harness:end -->"
 POINTER = f"""{BEGIN}
 ## Review harness
 
-For any substantial change, read and follow `HARNESS.md`: review rounds
-(hunt, triage, fix, prove, regress) until `python3 .harness/gate.py` exits 0,
-then a deslop + simplify pass and one clean confirmation round.
+For any substantial change, read and follow `HARNESS.md`: brainstorm and
+plan first, execute the plan task by task, then review rounds (hunt, triage,
+fix, prove, regress) until `python3 .harness/gate.py` exits 0, then a deslop
++ simplify pass and one clean confirmation round.
 {END}
 """
 BLOCK = re.compile(re.escape(BEGIN) + ".*?" + re.escape(END) + "\n?", re.DOTALL)
